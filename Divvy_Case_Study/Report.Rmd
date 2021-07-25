@@ -1,0 +1,145 @@
+---
+title: "Divvy Case Study, Data Cleaning Report"
+author: "Tanner Quesenberry"
+date: "7/13/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(magrittr)
+library(knitr)
+```
+
+## Data Cleaning Steps
+
+* Install and load the `tidyverse`, `lubridate`, `ggplot2` and `dplyr` packages.
+* Read in the .csv data files for the months of June 2020 to May 2021.
+``` {r echo=FALSE, message=FALSE, results='hide'}
+jun_2020_to_may_2021 <- read_csv("divvy-cleaned-data.csv")
+```
+  
+* Join the tables from June 2020 to Nov 2020 together with `full_join()` to get combined data frames.
+Example `apr_may <- full_join(apr_2021_trips, may_2021_trips)`
+* Repeat table joining for tables from Dec 2020 to May 2021.
+* Resolve the incompatible type difference of `start_station_id` and `end_station_id` columns by casting to characters. `jun_nov <- jun_nov %>% mutate(start_station_id = as.character(start_station_id))`
+`jun_nov <- jun_nov %>% mutate(end_station_id = as.character(end_station_id))`
+* Join these two 6 month tables to form a single one year table for analysis.
+* Save the table to a .csv file for later reference if needed.
+`write.csv(jun_2020_to_may_2021, "~/Desktop/Programming/DataAnalyst/Capstone/202006-202105-divvy-tripdata.csv", row.names = FALSE)`  
+
+* Found 209 duplicate rows exist using 
+`jun_2020_to_may_2021 %>% summarise(count = n_distinct(ride_id))`
+* Removed duplicate rows `jun_2020_to_may_2021 <- jun_2020_to_may_2021 %>% distinct(ride_id, .keep_all = TRUE)`
+* Verified that member_casual contains correct data
+`View(filter(jun_2020_to_may_2021, member_casual != "casual", member_casual != "member"))`
+* Verified `start_at` and `ended_at` had times for all rows through viewing and sorting the table.
+* Checked that `rideable_type` column contained the correct bike options.
+`jun_2020_to_may_2021 %>% distinct(rideable_type)`
+
+
+* Removed the `start_station_id` and `end_station_id` as they serve no purpose in this analysis.
+`jun_2020_to_may_2021 <- subset(jun_2020_to_may_2021, select = -c(start_station_id,end_station_id))`
+* Similarly removed `start_lat`, `start_lng`, `end_lat`, `end_lng`
+`jun_2020_to_may_2021 <- subset(jun_2020_to_may_2021, select = -c(start_lat,start_lng,end_lat,end_lng))`
+
+
+* Created an additional column `day_of_week` to indicate which weekday the ride starts on.
+`jun_2020_to_may_2021 <- jun_2020_to_may_2021 %>% mutate(day_of_week = wday(started_at))`
+* Created additional columns for date, month, day, and year to aggregate on later.
+`jun_2020_to_may_2021$date <- as.Date(jun_2020_to_may_2021$started_at)`
+`jun_2020_to_may_2021$month <- format(as.Date(jun_2020_to_may_2021$date), "%m")`
+`jun_2020_to_may_2021$day <- format(as.Date(jun_2020_to_may_2021$date), "%d")`
+`jun_2020_to_may_2021$year <- format(as.Date(jun_2020_to_may_2021$date), "%Y")`
+* Created an additional column for `ride_length_secs`. Then removed any row with a negative duration, and converted to a time format column `ride_length`.
+`jun_2020_to_may_2021 <- mutate(jun_2020_to_may_2021, ride_length_secs = (ended_at - started_at))`
+`jun_2020_to_may_2021 <- subset(jun_2020_to_may_2021, jun_2020_to_may_2021$ride_length_secs > 0)`
+`jun_2020_to_may_2021 <- mutate(jun_2020_to_may_2021, ride_length = hms::hms(seconds_to_period(jun_2020_to_may_2021$ride_length_secs)))`
+
+
+* Saved the cleaned data set as divvy-cleaned-data.csv
+`write.csv(jun_2020_to_may_2021, "~/Desktop/Programming/DataAnalyst/Capstone/divvy-cleaned-data.csv", row.names = FALSE)`
+
+
+## Descriptive Analysis
+
+##### Gathering the descriptive statistics for the user ride lengths.
+
+``` {r echo=FALSE, results='hold', comment="" }
+cat("Ride length (seconds)", "\n")
+
+cat("Min: ", min(jun_2020_to_may_2021$ride_length_secs), "\n")
+cat("Max: ", max(jun_2020_to_may_2021$ride_length_secs), "\n")
+cat("Median: ", median(jun_2020_to_may_2021$ride_length_secs), "\n")
+cat("Mean: ", mean(jun_2020_to_may_2021$ride_length_secs), "\n")
+```
+
+##### Comparing the ride lengths of members vs casual riders
+
+``` {r echo=FALSE, results='hold', comment="" }
+Rider <- jun_2020_to_may_2021$member_casual
+length_secs <- jun_2020_to_may_2021$ride_length_secs
+
+cat("Mean\n")
+aggregate(length_secs ~ Rider, FUN = mean)
+cat("\nMedian\n")
+aggregate(length_secs ~ Rider, FUN = median)
+cat("\nMax\n")
+aggregate(length_secs ~ Rider, FUN = max)
+cat("\nMin\n")
+aggregate(length_secs ~ Rider, FUN = min)
+
+```
+
+##### Comparing casual vs member ride lengths by day of week
+
+``` {r echo=FALSE, comment=""}
+Rider <- jun_2020_to_may_2021$member_casual
+length_secs <- jun_2020_to_may_2021$ride_length_secs
+weekday <- jun_2020_to_may_2021$day_of_week
+cat("Sunday = 1 ... Saturday = 7\n")
+aggregate(length_secs ~ Rider + weekday, FUN = mean)
+```
+
+
+##### Analyze ridership by type and weekday
+
+``` {r echo=FALSE, message=FALSE}
+jun_2020_to_may_2021 %>% mutate(weekday = wday(started_at, label = TRUE)) %>% group_by(member_casual, weekday) %>% summarise(number_of_rides = n(), average_duration = mean(ride_length_secs)) %>% arrange(member_casual, weekday)
+```
+
+
+
+## Visualize ridership by type
+
+```{r pressure, echo=FALSE, message=FALSE}
+options(scipen=5)
+jun_2020_to_may_2021 %>% 
+    mutate(weekday = wday(started_at, label = TRUE)) %>% 
+    group_by(member_casual, weekday) %>% 
+    summarise(number_of_rides = n()
+              ,average_duration = mean(ride_length_secs)) %>% 
+    arrange(member_casual, weekday)  %>% 
+    ggplot(aes(x = weekday, y = number_of_rides, fill = member_casual)) +
+    geom_col(position = "dodge") + ylab("Total Rides") + xlab("Day of Week") +ggtitle("Total Rides Per Weekday")
+```
+
+```{r echo=FALSE, message=FALSE}
+jun_2020_to_may_2021 %>% 
+    mutate(weekday = wday(started_at, label = TRUE)) %>% 
+    group_by(member_casual, weekday) %>% 
+    summarise(number_of_rides = n()
+              ,average_duration = (mean(ride_length_secs)/60)) %>% 
+    arrange(member_casual, weekday)  %>% 
+    ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+    geom_col(position = "dodge") + xlab("Day of Week") + ylab("Average Ride Length (Minutes)") + ggtitle("Average Ride Time By Day")
+```
