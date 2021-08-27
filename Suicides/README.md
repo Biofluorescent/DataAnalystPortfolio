@@ -16,5 +16,4 @@ https://www.who.int/news-room/fact-sheets/detail/suicide
 Below is the dynamic dashboard that I created based on some newly learned design concepts to explore suicide rates around the world.  
 Feel free to download the `suicides.xlsx` file to interact with the dashboard.
 
-
-![suicide_dashboard](https://user-images.githubusercontent.com/21090832/131049187-1c3c66cc-ad65-4eea-8568-ebef7dd28719.png)
+![dashboard](https://user-images.githubusercontent.com/21090832/131056063-33e778e5-eacb-4d91-bed1-f020f97c4747.png)
